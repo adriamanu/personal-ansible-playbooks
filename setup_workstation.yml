@@ -1,0 +1,167 @@
+---
+- name: Debian Workstation Configuration
+  hosts: localhost
+  connection: local
+  become: yes
+
+  vars:
+    # --- VERSION MANAGEMENT ---
+    go_version: "1.22.1"
+    tfenv_version: "v3.0.0"
+    username: "{{ ansible_user_id }}" # Retrieves the current user ID
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install standard packages (Apt)
+      apt:
+        name:
+          - vim
+          - tmux
+          - alacritty
+          - curl
+          - git
+          - unzip
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - xdg-utils  # Required for setting default browser
+        state: present
+
+    # --- GO INSTALLATION ---
+    - name: Check if Go is already installed
+      command: go version
+      register: go_installed
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Download and install Go
+      block:
+        - name: Download Go archive
+          get_url:
+            url: "https://go.dev/dl/go{{ go_version }}.linux-amd64.tar.gz"
+            dest: "/tmp/go.tar.gz"
+        - name: Remove old Go version
+          file:
+            path: /usr/local/go
+            state: absent
+        - name: Extract Go to /usr/local
+          unarchive:
+            src: "/tmp/go.tar.gz"
+            dest: /usr/local
+            remote_src: yes
+      when: go_installed.failed or go_version not in go_installed.stdout
+
+    # --- BRAVE BROWSER INSTALLATION ---
+    - name: Download Brave Browser GPG key
+      get_url:
+        url: https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+        dest: /usr/share/keyrings/brave-browser-archive-keyring.gpg
+        mode: '0644'
+
+    - name: Add Brave Browser repository
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main"
+        state: present
+        filename: brave-browser-release
+
+    - name: Install Brave Browser
+      apt:
+        name: brave-browser
+        state: present
+        update_cache: yes
+
+    # --- 1PASSWORD INSTALLATION ---
+    - name: Download 1Password GPG key
+      get_url:
+        url: https://downloads.1password.com/linux/keys/1password.asc
+        dest: /usr/share/keyrings/1password-archive-keyring.gpg
+        mode: '0644'
+
+    - name: Add 1Password repository
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main"
+        state: present
+        filename: 1password
+
+    - name: Install 1Password and 1Password CLI
+      apt:
+        name:
+          - 1password
+          - 1password-cli
+        state: present
+        update_cache: yes
+
+    # --- TFENV INSTALLATION ---
+    - name: Clone tfenv repository
+      git:
+        repo: 'https://github.com/tfutils/tfenv.git'
+        dest: "/home/{{ username }}/.tfenv"
+        version: "{{ tfenv_version }}"
+      become: no
+
+    - name: Create symlinks for tfenv and terraform
+      file:
+        src: "/home/{{ username }}/.tfenv/bin/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        state: link
+      loop:
+        - tfenv
+        - terraform
+
+    # --- CLIs (AWS & AZURE) ---
+    - name: Install AWS CLI v2
+      shell: |
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip -o awscliv2.zip
+        ./aws/install --update
+        rm -rf aws awscliv2.zip
+      args:
+        chdir: /tmp
+        creates: /usr/local/bin/aws
+
+    - name: Add Microsoft GPG key for Azure CLI
+      get_url:
+        url: https://packages.microsoft.com/keys/microsoft.asc
+        dest: /usr/share/keyrings/microsoft.gpg
+        mode: '0644'
+
+    - name: Add Azure CLI repository
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ {{ ansible_distribution_release }} main"
+        state: present
+        filename: azure-cli
+
+    - name: Install Azure CLI
+      apt:
+        name: azure-cli
+        state: present
+        update_cache: yes
+
+    # --- DEFAULT APPLICATIONS ---
+    - name: Set Alacritty as default terminal
+      alternatives:
+        name: x-terminal-emulator
+        path: /usr/bin/alacritty
+
+    - name: Set Brave as default browser (System alternatives)
+      alternatives:
+        name: x-www-browser
+        path: /usr/bin/brave-browser
+
+    - name: Set Brave as default browser (User XDG settings)
+      become: no
+      command: xdg-settings set default-web-browser brave-browser.desktop
+      changed_when: false
+
+    # --- PATH & FINAL CONFIG ---
+    - name: Add Go to PATH in .bashrc
+      lineinfile:
+        path: "/home/{{ username }}/.bashrc"
+        line: 'export PATH=$PATH:/usr/local/go/bin'
+        state: present
+      become: no
+
