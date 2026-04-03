@@ -11,11 +11,13 @@
     username: "{{ ansible_user_id }}" # Retrieves the current user ID
 
   tasks:
-    - name: Update apt cache
+    - name: "[APT] Update apt cache"
+      tags: apt
       apt:
         update_cache: yes
 
-    - name: Install standard packages (Apt)
+    - name: "[APT] Install standard packages (Apt)"
+      tags: apt
       apt:
         name:
           - vim
@@ -32,13 +34,16 @@
         state: present
 
     # --- GO INSTALLATION ---
-    - name: Check if Go is already installed
+    - name: "[GO] Check if Go is already installed"
+      tags: golang
       command: go version
       register: go_installed
       ignore_errors: yes
       changed_when: false
+      become: no
 
-    - name: Download and install Go
+    - name: "[GO] Download and install Go"
+      tags: golang
       block:
         - name: Download Go archive
           get_url:
@@ -55,36 +60,32 @@
             remote_src: yes
       when: go_installed.failed or go_version not in go_installed.stdout
 
-    # --- ROBUST GO PATH ---
-    - name: Ensure Go binaries are in PATH
+    - name: "[GO] Ensure Go binaries are in PATH"
+      tags: golang
       lineinfile:
         path: "/home/{{ username }}/.bashrc"
-        line: "export PATH=$PATH:/usr/local/go/bin:$(go env GOPATH)/bin"
+        line: "export PATH=$PATH:/usr/local/go/bin"
         create: yes
         state: present
       become: no
 
-    # --- FIX AZURE CLI FOR TRIXIE ---
-    - name: Add Azure CLI repository (Forced to Bookworm for Trixie compatibility)
-      apt_repository:
-        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main"
-        state: present
-        filename: azure-cli
-
     # --- BRAVE BROWSER INSTALLATION ---
-    - name: Download Brave Browser GPG key
+    - name: "[BRAVE] Download Brave Browser GPG key"
+      tags: brave
       get_url:
         url: https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
         dest: /usr/share/keyrings/brave-browser-archive-keyring.gpg
         mode: "0644"
 
-    - name: Add Brave Browser repository
+    - name: "[BRAVE] Add Brave Browser repository"
+      tags: brave
       apt_repository:
         repo: "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main"
         state: present
         filename: brave-browser-release
 
-    - name: Install Brave Browser
+    - name: "[BRAVE] Install Brave Browser"
+      tags: brave
       apt:
         name: brave-browser
         state: present
@@ -92,18 +93,21 @@
 
     # --- 1PASSWORD INSTALLATION ---
     - name: Download 1Password GPG key
+      tags: 1password
       get_url:
         url: https://downloads.1password.com/linux/keys/1password.asc
         dest: /usr/share/keyrings/1password-archive-keyring.gpg
         mode: "0644"
 
     - name: Add 1Password repository
+      tags: 1password
       apt_repository:
         repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main"
         state: present
         filename: 1password
 
     - name: Install 1Password and 1Password CLI
+      tags: 1password
       apt:
         name:
           - 1password
@@ -113,6 +117,7 @@
 
     # --- TFENV INSTALLATION ---
     - name: Clone tfenv repository
+      tags: terraform
       git:
         repo: "https://github.com/tfutils/tfenv.git"
         dest: "/home/{{ username }}/.tfenv"
@@ -120,6 +125,7 @@
       become: no
 
     - name: Create symlinks for tfenv and terraform
+      tags: terraform
       file:
         src: "/home/{{ username }}/.tfenv/bin/{{ item }}"
         dest: "/usr/local/bin/{{ item }}"
@@ -129,7 +135,8 @@
         - terraform
 
     # --- CLIs (AWS & AZURE) ---
-    - name: Install AWS CLI v2
+    - name: "[AWS] install AWS CLI v2"
+      tags: aws
       shell: |
         curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
         unzip -o awscliv2.zip
@@ -139,44 +146,42 @@
         chdir: /tmp
         creates: /usr/local/bin/aws
 
-    - name: Add Microsoft GPG key for Azure CLI
+    - name: "[AZURE] Add Microsoft GPG key for Azure CLI"
+      tags: azure
       get_url:
         url: https://packages.microsoft.com/keys/microsoft.asc
         dest: /usr/share/keyrings/microsoft.gpg
         mode: "0644"
 
-    - name: Add Azure CLI repository (Forced to Bookworm for Trixie compatibility)
+    - name: "[AZURE] Add Azure CLI repository (Forced to Bookworm for Trixie compatibility)"
+      tags: azure
       apt_repository:
         repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main"
         state: present
         filename: azure-cli
 
-    - name: Install Azure CLI
+    - name: "[AZURE] Install Azure CLI"
+      tags: azure
       apt:
         name: azure-cli
         state: present
         update_cache: yes
 
     # --- DEFAULT APPLICATIONS ---
-    - name: Set Alacritty as default terminal
+    - name: "[BRAVE] Set Alacritty as default terminal"
+      tags: brave
       alternatives:
         name: x-terminal-emulator
         path: /usr/bin/alacritty
 
-    - name: Set Brave as default browser (System alternatives)
+    - name: "[BRAVE] Set Brave as default browser (System alternatives)"
+      tags: brave
       alternatives:
         name: x-www-browser
         path: /usr/bin/brave-browser
 
-    - name: Set Brave as default browser (User XDG settings)
+    - name: "[BRAVE] Set Brave as default browser (User XDG settings)"
+      tags: brave
       become: no
       command: xdg-settings set default-web-browser brave-browser.desktop
       changed_when: false
-
-    # --- PATH & FINAL CONFIG ---
-    - name: Add Go to PATH in .bashrc
-      lineinfile:
-        path: "/home/{{ username }}/.bashrc"
-        line: "export PATH=$PATH:/usr/local/go/bin"
-        state: present
-      become: no
