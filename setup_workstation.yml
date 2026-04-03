@@ -28,7 +28,7 @@
           - ca-certificates
           - gnupg
           - lsb-release
-          - xdg-utils  # Required for setting default browser
+          - xdg-utils # Required for setting default browser
         state: present
 
     # --- GO INSTALLATION ---
@@ -55,12 +55,28 @@
             remote_src: yes
       when: go_installed.failed or go_version not in go_installed.stdout
 
+    # --- ROBUST GO PATH ---
+    - name: Ensure Go binaries are in PATH
+      lineinfile:
+        path: "/home/{{ username }}/.bashrc"
+        line: "export PATH=$PATH:/usr/local/go/bin:$(go env GOPATH)/bin"
+        create: yes
+        state: present
+      become: no
+
+    # --- FIX AZURE CLI FOR TRIXIE ---
+    - name: Add Azure CLI repository (Forced to Bookworm for Trixie compatibility)
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main"
+        state: present
+        filename: azure-cli
+
     # --- BRAVE BROWSER INSTALLATION ---
     - name: Download Brave Browser GPG key
       get_url:
         url: https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
         dest: /usr/share/keyrings/brave-browser-archive-keyring.gpg
-        mode: '0644'
+        mode: "0644"
 
     - name: Add Brave Browser repository
       apt_repository:
@@ -79,7 +95,7 @@
       get_url:
         url: https://downloads.1password.com/linux/keys/1password.asc
         dest: /usr/share/keyrings/1password-archive-keyring.gpg
-        mode: '0644'
+        mode: "0644"
 
     - name: Add 1Password repository
       apt_repository:
@@ -98,7 +114,7 @@
     # --- TFENV INSTALLATION ---
     - name: Clone tfenv repository
       git:
-        repo: 'https://github.com/tfutils/tfenv.git'
+        repo: "https://github.com/tfutils/tfenv.git"
         dest: "/home/{{ username }}/.tfenv"
         version: "{{ tfenv_version }}"
       become: no
@@ -127,11 +143,11 @@
       get_url:
         url: https://packages.microsoft.com/keys/microsoft.asc
         dest: /usr/share/keyrings/microsoft.gpg
-        mode: '0644'
+        mode: "0644"
 
-    - name: Add Azure CLI repository
+    - name: Add Azure CLI repository (Forced to Bookworm for Trixie compatibility)
       apt_repository:
-        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ {{ ansible_distribution_release }} main"
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main"
         state: present
         filename: azure-cli
 
@@ -161,7 +177,6 @@
     - name: Add Go to PATH in .bashrc
       lineinfile:
         path: "/home/{{ username }}/.bashrc"
-        line: 'export PATH=$PATH:/usr/local/go/bin'
+        line: "export PATH=$PATH:/usr/local/go/bin"
         state: present
       become: no
-
