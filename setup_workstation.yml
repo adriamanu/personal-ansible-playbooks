@@ -16,7 +16,7 @@
       apt:
         update_cache: yes
 
-    - name: "[APT] Install standard packages (Apt)"
+    - name: "[APT] Install standard packages"
       tags: apt
       apt:
         name:
@@ -31,6 +31,17 @@
           - gnupg
           - lsb-release
           - xdg-utils # Required for setting default browser
+        state: present
+
+    - name: "[APT] Install xfce packages"
+      tags: apt
+      apt:
+        name:
+          - arc-theme
+          - papirus-icon-theme
+          - fonts-inter
+          - fonts-cascadia-code
+          - xfce4-goodies
         state: present
 
     # --- GO INSTALLATION ---
@@ -173,12 +184,16 @@
       alternatives:
         name: x-terminal-emulator
         path: /usr/bin/alacritty
+        link: /usr/bin/x-terminal-emulator
+        priority: 100
 
     - name: "[BRAVE] Set Brave as default browser (System alternatives)"
       tags: brave
       alternatives:
         name: x-www-browser
         path: /usr/bin/brave-browser
+        link: /usr/bin/x-www-browser
+        priority: 100
 
     - name: "[BRAVE] Set Brave as default browser (User XDG settings)"
       tags: brave
